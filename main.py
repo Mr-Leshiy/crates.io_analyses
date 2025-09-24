@@ -2,8 +2,6 @@ import csv
 import asyncio
 import aiohttp
 import aiofiles
-import tarfile
-import os
 import tempfile
 
 CRATES_IO_URL = "https://crates.io/api"
@@ -12,6 +10,7 @@ CRATES_IO_URL = "https://crates.io/api"
 def endpoint_url(endpoint):
     return f"{CRATES_IO_URL}/{endpoint}"
 
+
 async def main():
     fname = "crates_info.csv"
     print(f"Loading crates info into the {fname}")
@@ -19,33 +18,45 @@ async def main():
         async with aiohttp.ClientSession() as s:
             writer = csv.writer(f)
             writer.writerow(
-                ["name", "version", "advisories", "bans", "licenses", "sources"]
+                [
+                    "name",
+                    "version",
+                    "upload_time",
+                    "advisories",
+                    "bans",
+                    "licenses",
+                    "sources",
+                ]
             )
 
             info = await crates_info(s, "?sort=new")
 
             crates = await asyncio.gather(
                 *[
-                    process_crate(s, crate["name"], crate["newest_version"])
+                    analyse_crate(
+                        s, crate["name"], crate["newest_version"], crate["updated_at"]
+                    )
                     for crate in info["crates"]
                 ]
             )
             writer.writerows(crates)
-            
+
             current_amount = len(crates)
             next_page = info["meta"]["next_page"]
             total_amount = info["meta"]["total"]
 
             while next_page:
-                print(f"{round(current_amount/total_amount * 100, 2)}%", end="\r", flush=True)
+                print(
+                    f"{round(current_amount / total_amount * 100, 2)}%",
+                    end="\r",
+                    flush=True,
+                )
 
-                
                 info = await crates_info(s, next_page)
-
 
                 crates = await asyncio.gather(
                     *[
-                        process_crate(s, crate["name"], crate["newest_version"])
+                        analyse_crate(s, crate["name"], crate["newest_version"])
                         for crate in info["crates"]
                     ]
                 )
@@ -57,7 +68,9 @@ async def main():
             print(f"All crates info loaded, total crates amount: {len(crates)}")
 
 
-async def process_crate(s: aiohttp.ClientSession, name: str, version: str):
+async def analyse_crate(
+    s: aiohttp.ClientSession, name: str, version: str, upload_time: str
+):
     crate_name = f"{name}_{version}"
     fname = f"{crate_name}.tar.gz"
     with tempfile.TemporaryDirectory(dir="./") as tmpdirname:
@@ -105,6 +118,7 @@ async def process_crate(s: aiohttp.ClientSession, name: str, version: str):
         return [
             name,
             version,
+            upload_time,
             advisories,
             bans,
             licenses,
