@@ -29,7 +29,7 @@ async def main():
                 ]
             )
 
-            info = await crates_info(s, "?sort=new")
+            info = await crates_info(s, "?sort=new&include_yanked=no")
 
             crates = await asyncio.gather(
                 *[
@@ -37,6 +37,7 @@ async def main():
                         s, crate["name"], crate["newest_version"], crate["updated_at"]
                     )
                     for crate in info["crates"]
+                    if not crate["yanked"]
                 ]
             )
             writer.writerows(crates)
@@ -52,12 +53,12 @@ async def main():
                     flush=True,
                 )
 
-                info = await crates_info(s, next_page)
-
+                info = await crates_info(s, f"{next_page}")
                 crates = await asyncio.gather(
                     *[
-                        analyse_crate(s, crate["name"], crate["newest_version"])
+                        analyse_crate(s, crate["name"], crate["newest_version"], crate["updated_at"])
                         for crate in info["crates"]
+                        if not crate["yanked"]
                     ]
                 )
                 writer.writerows(crates)
@@ -65,7 +66,7 @@ async def main():
                 current_amount += len(crates)
                 next_page = info["meta"]["next_page"]
 
-            print(f"All crates info loaded, total crates amount: {len(crates)}")
+            print(f"All crates info loaded, total crates amount: {total_amount}")
 
 
 async def analyse_crate(
@@ -79,7 +80,9 @@ async def analyse_crate(
             aiofiles.open(f"{tmpdirname}/{fname}", "wb") as f,
         ):
             if resp.content_type != "application/gzip":
-                raise "Is not 'application/gzip'"
+                return []
+                print(f"{name}-{version}")
+                raise f"Is not 'application/gzip'"
 
             chunk_size = 1024 * 4
             while True:
@@ -109,7 +112,8 @@ async def analyse_crate(
             stderr=asyncio.subprocess.DEVNULL,
         )
         out, _ = await proc.communicate()
-
+        if out == b'':
+            return []
         out = out.decode("utf-8").strip().split(", ")
         advisories = out[0].split()[1] == "ok"
         bans = out[1].split()[1] == "ok"
