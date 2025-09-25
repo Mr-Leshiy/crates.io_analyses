@@ -4,8 +4,10 @@ import aiohttp
 import aiofiles
 import tempfile
 import shutil
+import logging
 
 CRATES_IO_URL = "https://crates.io/api"
+logger = logging.getLogger(__name__)
 
 
 def endpoint_url(endpoint):
@@ -14,7 +16,7 @@ def endpoint_url(endpoint):
 
 async def main():
     fname = "crates_info.csv"
-    print(f"Loading crates info into the {fname}")
+    logger.info(f"Loading crates info into the {fname}")
     with open(fname, "w") as f:
         async with aiohttp.ClientSession() as s:
             writer = csv.writer(f)
@@ -35,25 +37,23 @@ async def main():
             crates_iter = await analyze_crates(s, info["crates"])
             writer.writerows(crates_iter)
 
-            current_amount = sum(1 for _ in crates_iter)
+            processed_amount = sum(1 for _ in crates_iter)
             next_page = info["meta"]["next_page"]
             total_amount = info["meta"]["total"]
 
             while next_page:
-                print(
-                    f"{round(current_amount / total_amount * 100, 2)}%",
-                    end="\r",
-                    flush=True,
-                )
+                logger.info(f"processed {processed_amount}/{total_amount}")
 
                 info = await crates_info(s, f"{next_page}")
                 crates_iter = await analyze_crates(s, info["crates"])
                 writer.writerows(crates_iter)
 
-                current_amount += sum(1 for _ in crates_iter)
+                processed_amount += sum(1 for _ in crates_iter)
                 next_page = info["meta"]["next_page"]
 
-            print(f"All crates info loaded, total crates amount: {total_amount}")
+            logger.info(
+                f"All crates info loaded, total amount: {total_amount}, processed amount: {processed_amount}"
+            )
 
 
 async def analyze_crates(s: aiohttp.ClientSession, crates: dict):
