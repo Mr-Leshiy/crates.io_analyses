@@ -96,6 +96,8 @@ async def analyze_crates(s: aiohttp.ClientSession, crates: list):
             name=v[1]["name"],
             version=v[1]["newest_version"],
             upload_time=v[1]["updated_at"],
+            downloads=v[1]["downloads"],
+            recent_downloads=v[1]["recent_downloads"],
             advisories=v[0][0],
             bans=v[0][1],
             licenses=v[0][2],
