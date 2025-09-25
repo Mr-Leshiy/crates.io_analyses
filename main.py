@@ -35,9 +35,9 @@ async def main():
             info = await crates_info(s, "?sort=new&include_yanked=no")
 
             crates_iter = await analyze_crates(s, info["crates"])
+            processed_amount = sum(1 for _ in crates_iter)
             writer.writerows(crates_iter)
 
-            processed_amount = sum(1 for _ in crates_iter)
             next_page = info["meta"]["next_page"]
             total_amount = info["meta"]["total"]
 
@@ -46,9 +46,8 @@ async def main():
 
                 info = await crates_info(s, f"{next_page}")
                 crates_iter = await analyze_crates(s, info["crates"])
-                writer.writerows(crates_iter)
-
                 processed_amount += sum(1 for _ in crates_iter)
+                writer.writerows(crates_iter)
                 next_page = info["meta"]["next_page"]
 
             logger.info(
@@ -143,4 +142,5 @@ async def crates_info(s: aiohttp.ClientSession, args: str):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
