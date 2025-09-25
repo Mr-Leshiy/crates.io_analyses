@@ -3,6 +3,7 @@ import asyncio
 import aiohttp
 import aiofiles
 import tempfile
+import shutil
 
 CRATES_IO_URL = "https://crates.io/api"
 
@@ -31,18 +32,10 @@ async def main():
 
             info = await crates_info(s, "?sort=new&include_yanked=no")
 
-            crates = await asyncio.gather(
-                *[
-                    analyse_crate(
-                        s, crate["name"], crate["newest_version"], crate["updated_at"]
-                    )
-                    for crate in info["crates"]
-                    if not crate["yanked"]
-                ]
-            )
-            writer.writerows(crates)
+            crates_iter = await analyze_crates(s, info["crates"])
+            writer.writerows(crates_iter)
 
-            current_amount = len(crates)
+            current_amount = sum(1 for _ in crates_iter)
             next_page = info["meta"]["next_page"]
             total_amount = info["meta"]["total"]
 
@@ -54,24 +47,35 @@ async def main():
                 )
 
                 info = await crates_info(s, f"{next_page}")
-                crates = await asyncio.gather(
-                    *[
-                        analyse_crate(s, crate["name"], crate["newest_version"], crate["updated_at"])
-                        for crate in info["crates"]
-                        if not crate["yanked"]
-                    ]
-                )
-                writer.writerows(crates)
+                crates_iter = await analyze_crates(s, info["crates"])
+                writer.writerows(crates_iter)
 
-                current_amount += len(crates)
+                current_amount += sum(1 for _ in crates_iter)
                 next_page = info["meta"]["next_page"]
 
             print(f"All crates info loaded, total crates amount: {total_amount}")
 
 
+async def analyze_crates(s: aiohttp.ClientSession, crates: dict):
+    return filter(
+        # filter out all `None` elements returned by 'analyse_crate'
+        lambda v: v != None,
+        await asyncio.gather(
+            *map(
+                lambda c: analyse_crate(
+                    s, c["name"], c["newest_version"], c["updated_at"]
+                ),
+                filter(lambda c: not c["yanked"], crates),
+            ),
+        ),
+    )
+
+
 async def analyse_crate(
     s: aiohttp.ClientSession, name: str, version: str, upload_time: str
 ):
+    "Return 'None' if cannot analyse the crate for some reason"
+
     crate_name = f"{name}_{version}"
     fname = f"{crate_name}.tar.gz"
     with tempfile.TemporaryDirectory(dir="./") as tmpdirname:
@@ -80,9 +84,7 @@ async def analyse_crate(
             aiofiles.open(f"{tmpdirname}/{fname}", "wb") as f,
         ):
             if resp.content_type != "application/gzip":
-                return []
-                print(f"{name}-{version}")
-                raise f"Is not 'application/gzip'"
+                return None
 
             chunk_size = 1024 * 4
             while True:
@@ -102,6 +104,9 @@ async def analyse_crate(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        # copy `deny.toml` file to that crate dir
+        shutil.copyfile("./deny.toml", f"{tmpdirname}/deny.toml", follow_symlinks=True)
+
         # run 'cargo deny check'
         proc = await asyncio.subprocess.create_subprocess_exec(
             "cargo",
@@ -112,8 +117,10 @@ async def analyse_crate(
             stderr=asyncio.subprocess.DEVNULL,
         )
         out, _ = await proc.communicate()
-        if out == b'':
-            return []
+
+        if out == b"":
+            return None
+
         out = out.decode("utf-8").strip().split(", ")
         advisories = out[0].split()[1] == "ok"
         bans = out[1].split()[1] == "ok"
