@@ -14,23 +14,51 @@ def endpoint_url(endpoint):
     return f"{CRATES_IO_URL}/{endpoint}"
 
 
+class CrateInfo:
+    def colum_names() -> list:
+        return [
+            "name",
+            "version",
+            "upload_time",
+            "downloads",
+            "recent_downloads",
+            "advisories",
+            "bans",
+            "licenses",
+            "sources",
+        ]
+
+    def to_row(
+        name: str,
+        version: str,
+        upload_time: str,
+        downloads: int,
+        recent_downloads: int,
+        advisories: bool,
+        bans: bool,
+        licenses: bool,
+        sources: bool,
+    ) -> list:
+        return [
+            name,
+            version,
+            upload_time,
+            downloads,
+            recent_downloads,
+            advisories,
+            bans,
+            licenses,
+            sources,
+        ]
+
+
 async def main():
     fname = "crates_info.csv"
     logger.info(f"Loading crates info into the {fname}")
     with open(fname, "w") as f:
         async with aiohttp.ClientSession() as s:
             writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "name",
-                    "version",
-                    "upload_time",
-                    "advisories",
-                    "bans",
-                    "licenses",
-                    "sources",
-                ]
-            )
+            writer.writerow(CrateInfo.colum_names())
 
             info = await crates_info(s, "?sort=new&include_yanked=no")
 
@@ -55,24 +83,32 @@ async def main():
             )
 
 
-async def analyze_crates(s: aiohttp.ClientSession, crates: dict):
-    return list(filter(
-        # filter out all `None` elements returned by 'analyse_crate'
-        lambda v: v != None,
-        await asyncio.gather(
-            *map(
-                lambda c: analyse_crate(
-                    s, c["name"], c["newest_version"], c["updated_at"]
-                ),
-                filter(lambda c: not c["yanked"], crates),
-            ),
+async def analyze_crates(s: aiohttp.ClientSession, crates: list):
+    crates_iter = filter(lambda c: not c["yanked"], crates)
+    crates_iter = map(
+        lambda c: analyse_crate(s, c["name"], c["newest_version"], c["updated_at"]),
+        crates_iter,
+    )
+    # filter out all `None` elements returned by 'analyse_crate'
+    crates_iter = filter(lambda v: v != None, await asyncio.gather(*crates_iter))
+    crates_iter = map(
+        lambda v: CrateInfo.to_row(
+            name=v[1]["name"],
+            version=v[1]["newest_version"],
+            upload_time=v[1]["updated_at"],
+            advisories=v[0][0],
+            bans=v[0][1],
+            licenses=v[0][2],
+            sources=v[0][3],
         ),
-    ))
+        zip(crates_iter, crates),
+    )
+    return list(crates_iter)
 
 
 async def analyse_crate(
     s: aiohttp.ClientSession, name: str, version: str, upload_time: str
-):
+) -> tuple[bool, bool, bool, bool]:
     "Return 'None' if cannot analyse the crate for some reason"
 
     crate_name = f"{name}_{version}"
@@ -93,7 +129,7 @@ async def analyse_crate(
                 await f.write(data)
 
         # unpack archive
-        await asyncio.subprocess.create_subprocess_exec(
+        proc = await asyncio.subprocess.create_subprocess_exec(
             "tar",
             "-xf",
             f"{tmpdirname}/{fname}",
@@ -103,6 +139,7 @@ async def analyse_crate(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        await proc.wait()
         # copy `deny.toml` file to that crate dir
         shutil.copyfile("./deny.toml", f"{tmpdirname}/deny.toml", follow_symlinks=True)
 
@@ -115,6 +152,7 @@ async def analyse_crate(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        await proc.wait()
         out, _ = await proc.communicate()
 
         if out == b"":
@@ -125,15 +163,7 @@ async def analyse_crate(
         bans = out[1].split()[1] == "ok"
         licenses = out[2].split()[1] == "ok"
         sources = out[3].split()[1] == "ok"
-        return [
-            name,
-            version,
-            upload_time,
-            advisories,
-            bans,
-            licenses,
-            sources,
-        ]
+        return (advisories, bans, licenses, sources)
 
 
 async def crates_info(s: aiohttp.ClientSession, args: str):
