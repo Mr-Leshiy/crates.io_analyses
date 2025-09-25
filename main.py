@@ -34,9 +34,9 @@ async def main():
 
             info = await crates_info(s, "?sort=new&include_yanked=no")
 
-            crates_iter = await analyze_crates(s, info["crates"])
-            processed_amount = sum(1 for _ in crates_iter)
-            writer.writerows(crates_iter)
+            crates = await analyze_crates(s, info["crates"])
+            processed_amount = len(crates)
+            writer.writerows(crates)
 
             next_page = info["meta"]["next_page"]
             total_amount = info["meta"]["total"]
@@ -45,9 +45,9 @@ async def main():
                 logger.info(f"processed {processed_amount}/{total_amount}")
 
                 info = await crates_info(s, f"{next_page}")
-                crates_iter = await analyze_crates(s, info["crates"])
-                processed_amount += sum(1 for _ in crates_iter)
-                writer.writerows(crates_iter)
+                crates = await analyze_crates(s, info["crates"])
+                processed_amount += len(crates)
+                writer.writerows(crates)
                 next_page = info["meta"]["next_page"]
 
             logger.info(
@@ -56,7 +56,7 @@ async def main():
 
 
 async def analyze_crates(s: aiohttp.ClientSession, crates: dict):
-    return filter(
+    return list(filter(
         # filter out all `None` elements returned by 'analyse_crate'
         lambda v: v != None,
         await asyncio.gather(
@@ -67,7 +67,7 @@ async def analyze_crates(s: aiohttp.ClientSession, crates: dict):
                 filter(lambda c: not c["yanked"], crates),
             ),
         ),
-    )
+    ))
 
 
 async def analyse_crate(
