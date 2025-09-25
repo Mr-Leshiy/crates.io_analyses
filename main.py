@@ -98,19 +98,33 @@ async def analyze_crates(s: aiohttp.ClientSession, crates: list):
             upload_time=v[1]["updated_at"],
             downloads=v[1]["downloads"],
             recent_downloads=v[1]["recent_downloads"],
-            advisories=v[0][0],
-            bans=v[0][1],
-            licenses=v[0][2],
-            sources=v[0][3],
+            advisories=v[0].advisories,
+            bans=v[0].bans,
+            licenses=v[0].licenses,
+            sources=v[0].sources,
         ),
         zip(crates_iter, crates),
     )
     return list(crates_iter)
 
 
+class CargoDenyInfo:
+    def __init__(
+        self,
+        advisories: bool,
+        bans: bool,
+        licenses: bool,
+        sources: bool,
+    ):
+        self.advisories = advisories
+        self.bans = bans
+        self.licenses = licenses
+        self.sources = sources
+
+
 async def analyse_crate(
     s: aiohttp.ClientSession, name: str, version: str, upload_time: str
-) -> tuple[bool, bool, bool, bool]:
+) -> CargoDenyInfo:
     "Return 'None' if cannot analyse the crate for some reason"
 
     crate_name = f"{name}_{version}"
@@ -165,7 +179,7 @@ async def analyse_crate(
         bans = out[1].split()[1] == "ok"
         licenses = out[2].split()[1] == "ok"
         sources = out[3].split()[1] == "ok"
-        return (advisories, bans, licenses, sources)
+        return CargoDenyInfo(advisories, bans, licenses, sources)
 
 
 async def crates_info(s: aiohttp.ClientSession, args: str):
