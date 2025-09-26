@@ -15,4 +15,4 @@ RUN cargo install --locked --version 0.14.24 cargo-deny
 WORKDIR /app
 COPY pyproject.toml uv.lock deny.toml main.py .
 RUN uv sync
-CMD ["uv", "run", "main.py"]
+ENTRYPOINT ["uv", "run", "main.py"]

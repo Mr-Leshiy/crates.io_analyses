@@ -5,6 +5,7 @@ import aiofiles
 import tempfile
 import shutil
 import logging
+import argparse
 
 CRATES_IO_URL = "https://crates.io/api"
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class CrateInfo:
         ]
 
 
-async def main():
+async def main(args):
     fname = "crates_info.csv"
     logger.info(f"Loading crates info into the {fname}")
     with open(fname, "w") as f:
@@ -62,15 +63,12 @@ async def main():
 
             info = await crates_info(s, "?sort=new&include_yanked=no")
 
-            crates = await analyze_crates(s, info["crates"])
-            processed_amount = len(crates)
-            writer.writerows(crates)
+            processed_amount = 0
+            next_page = args.next_page
 
-            next_page = info["meta"]["next_page"]
-            total_amount = info["meta"]["total"]
-
-            while next_page:
-                logger.info(f"processed {processed_amount}/{total_amount}")
+            while next_page != None:
+                if next_page == "":
+                    next_page = "?sort=new&include_yanked=no"
 
                 info = await crates_info(s, f"{next_page}")
                 crates = await analyze_crates(s, info["crates"])
@@ -78,8 +76,12 @@ async def main():
                 writer.writerows(crates)
                 next_page = info["meta"]["next_page"]
 
+                logger.info(
+                    f"processed {processed_amount}/{info['meta']['total']}, next_page: {next_page}"
+                )
+
             logger.info(
-                f"All crates info loaded, total amount: {total_amount}, processed amount: {processed_amount}"
+                f"All crates info loaded, total amount: {info['meta']['total']}, processed amount: {processed_amount}"
             )
 
 
@@ -189,4 +191,12 @@ async def crates_info(s: aiohttp.ClientSession, args: str):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="crates.io gatheting tool.")
+    parser.add_argument(
+        "--next_page",
+        type=str,
+        default="",
+        help="crates.io 'v1/crates' endpoint 'seek' query argument",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(args))
