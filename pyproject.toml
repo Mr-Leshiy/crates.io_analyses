@@ -10,6 +10,8 @@ dependencies = [
     "argparse>=1.4.0",
     "asyncio>=4.0.0",
     "logging>=0.4.9.6",
+    "matplotlib>=3.10.6",
+    "pandas>=2.3.2",
     "requests>=2.32.5",
     "ruff>=0.13.1",
 ]
