@@ -190,7 +190,11 @@ async def crates_info(s: aiohttp.ClientSession, args: str):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%m/%d/%Y %I:%M:%S",
+    )
     parser = argparse.ArgumentParser(description="crates.io gatheting tool.")
     parser.add_argument(
         "--next_page",
