@@ -3,20 +3,22 @@ import pandas
 import matplotlib.pyplot as plt
 
 download_bins = [
-        0,
-        100,
-        1_000,
-        10_000,
-        100_000,
-        1_000_000,
-        10_000_000,
-        float("inf"),
+    0,
+    100,
+    1_000,
+    10_000,
+    100_000,
+    1_000_000,
+    10_000_000,
+    float("inf"),
 ]
+
 
 def analyze(dt: pandas.DataFrame, criteria: str):
     failure_amount = dt[criteria].value_counts().get(False, default=0)
+    total_amount = dt.shape[0]
     print(
-        f"{criteria} failure: {failure_amount}/{dt.size} = {failure_amount / dt.size * 100}%"
+        f"{criteria} failure: {failure_amount}/{total_amount} = {failure_amount / total_amount * 100}%"
     )
 
     groupped = (
@@ -34,9 +36,10 @@ def analyze(dt: pandas.DataFrame, criteria: str):
     )
     plt.show()
 
+
 def main(args):
     dt = pandas.concat([pandas.read_csv(f) for f in args.csv])
-    dt = dt.drop_duplicates(subset='name', keep=False)
+    dt = dt.drop_duplicates(subset="name", keep=False)
     print(f"Total crates amount: {dt.size}")
     analyze(dt, "advisories")
     analyze(dt, "bans")
